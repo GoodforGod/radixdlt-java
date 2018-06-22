@@ -10,16 +10,15 @@ import com.radixdlt.client.core.network.AtomSubmissionUpdate.AtomSubmissionState
 import com.radixdlt.client.core.network.IncreasingRetryTimer;
 import com.radixdlt.client.core.network.RadixNetwork;
 import com.radixdlt.client.core.serialization.RadixJson;
-import io.reactivex.Observable;
 import io.reactivex.functions.Predicate;
 import io.reactivex.observables.ConnectableObservable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A RadixLedger wraps a RadixNetwork and abstracts away network logic providing
@@ -101,8 +100,7 @@ public class RadixLedger {
 			})
 			.doOnSubscribe(atoms -> logger.info("Atom Query Subscribe: destination({}) class({})", destination, atomClass.getSimpleName()))
 			.publish()
-			.refCount()
-		;
+			.refCount();
 	}
 
 	/**
@@ -129,7 +127,7 @@ public class RadixLedger {
 			}
 
 			return status.doOnNext(atomSubmissionUpdate -> {
-				if (atomSubmissionUpdate.getState() == AtomSubmissionState.VALIDATION_ERROR) {
+				if (AtomSubmissionState.VALIDATION_ERROR.equals(atomSubmissionUpdate.getState())) {
 					logger.error(atomSubmissionUpdate.getMessage() + "\n" + RadixJson.getGson().toJson(atom));
 				}
 			});

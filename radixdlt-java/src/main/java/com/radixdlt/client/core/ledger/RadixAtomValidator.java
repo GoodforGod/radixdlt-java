@@ -1,18 +1,12 @@
 package com.radixdlt.client.core.ledger;
 
 import com.radixdlt.client.assets.Asset;
-import com.radixdlt.client.core.address.EUID;
-import com.radixdlt.client.core.atoms.AbstractConsumable;
-import com.radixdlt.client.core.atoms.Atom;
-import com.radixdlt.client.core.atoms.AtomValidationException;
-import com.radixdlt.client.core.atoms.AtomValidator;
-import com.radixdlt.client.core.atoms.Consumer;
-import com.radixdlt.client.core.atoms.Particle;
-import com.radixdlt.client.core.atoms.RadixHash;
+import com.radixdlt.client.core.atoms.*;
+import com.radixdlt.client.core.crypto.ECPublicKey;
 import com.radixdlt.client.core.crypto.ECSignature;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class RadixAtomValidator implements AtomValidator {
 	private final static RadixAtomValidator validator = new RadixAtomValidator();
@@ -34,44 +28,27 @@ public class RadixAtomValidator implements AtomValidator {
 	public void validateSignatures(Atom atom) throws AtomValidationException {
 		RadixHash hash = atom.getHash();
 
-		Optional<AtomValidationException> exception = atom.getParticles().stream()
-			.filter(Particle::isAbstractConsumable)
-			.map(Particle::getAsAbstractConsumable)
-			.map(particle -> {
-				if (particle.getOwners().isEmpty()) {
-					return new AtomValidationException("No owners in particle");
-				}
+		final List<AbstractConsumable> consumables = atom.getParticles().stream()
+				.filter(Particle::isAbstractConsumable)
+				.map(Particle::getAsAbstractConsumable)
+				.filter(particle -> Asset.POW.getId().equals(particle.getAssetId()))
+				.collect(Collectors.toList());
 
-				if (particle.getAssetId().equals(Asset.POW.getId())) {
-					return null;
-				}
+		for(AbstractConsumable particle : consumables) {
+			if (particle.getOwners().isEmpty()) {
+				throw new AtomValidationException("No owners in particle");
+			}
 
-				if (particle instanceof Consumer) {
-					Optional<AtomValidationException> consumerException = particle.getOwners().stream().map(owner -> {
-						Optional<ECSignature> signature = atom.getSignature(owner.getUID());
-						if (!signature.isPresent()) {
-							return new AtomValidationException("Missing signature");
-						}
+			if (particle instanceof Consumer) {
+				for (ECPublicKey owner : particle.getOwners()) {
+					ECSignature signature = atom.getSignature(owner.getUID())
+							.orElseThrow(() -> new ArithmeticException("Missing signature"));
 
-						if (!hash.verifySelf(owner, signature.get())) {
-							return new AtomValidationException("Bad signature");
-						}
-
-						return null;
-					}).filter(Objects::nonNull).findAny();
-
-					if (consumerException.isPresent()) {
-						return consumerException.get();
+					if (!hash.verifySelf(owner, signature)) {
+						throw new AtomValidationException("Bad signature");
 					}
 				}
-
-				return null;
-		})
-		.filter(Objects::nonNull)
-		.findAny();
-
-		if (exception.isPresent()) {
-			throw exception.get();
+			}
 		}
 	}
 
